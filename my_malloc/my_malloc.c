@@ -88,6 +88,16 @@ block_t *generate_new_block(size_t size) {
   return new_block;
 }
 
+void merge(block_t *curr) {
+  while (curr->next != NULL) {
+    if (curr->free == true && curr->next->free == true) {
+      curr->next = curr->next->next;
+      curr->size += sizeof(block_t) + curr->next->size;
+    } else {
+      curr = curr->next;
+    }
+  }
+}
 /*
   basic_malloc
   description: allocate memory requested by user
@@ -120,8 +130,11 @@ void *basic_malloc(size_t size, block_t *(find_block)(size_t, block_t *)) {
   This function free the memory
  */
 void basic_free(void *ptr) {
+  if (ptr == NULL)
+    return;
   block_t *curr = (block_t *)ptr - 1;
   curr->free = true;
+  merge(head);
 }
 /*
   ff_malloc
