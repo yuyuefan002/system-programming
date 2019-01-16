@@ -1,5 +1,13 @@
 #include "my_malloc.h"
 
+void debug() {
+  block_t *curr = head;
+  int i = 0;
+  while (curr != NULL) {
+    fprintf(stderr, "%d:%ld,%d\n", i++, curr->size, curr->free);
+    curr = curr->next;
+  }
+}
 /*
   name:ff_find_block
   description: Using First Fit strategy to determine the
@@ -12,10 +20,10 @@
   Output
   ff_block: if there is a fit block, return it; else, return NULL
  */
-block_t *ff_find_block(size_t size, block_t *prev) {
+block_t *ff_find_block(size_t size, block_t **prev) {
   block_t *curr = head, *ff_block = NULL;
-  while (curr != NULL && (curr->size < size || curr->free == false)) {
-    prev = curr;
+  while (curr != NULL && !(curr->free == true && curr->size > size)) {
+    *prev = curr;
     curr = curr->next;
   }
   ff_block = curr;
@@ -34,14 +42,14 @@ block_t *ff_find_block(size_t size, block_t *prev) {
   Output
   bf_block: if there is a fit block, return it; else, return NULL
  */
-block_t *bf_find_block(size_t size, block_t *prev) {
+block_t *bf_find_block(size_t size, block_t **prev) {
   block_t *curr = head, *bf_block = NULL;
   while (curr != NULL) {
     if (curr->free == true && curr->size > size &&
         (bf_block == NULL || curr->size < bf_block->size)) {
       bf_block = curr;
     }
-    prev = curr;
+    *prev = curr;
   }
   return bf_block;
 }
@@ -82,7 +90,7 @@ block_t *generate_new_block(size_t size) {
     fprintf(stderr, "fail to generate new block\n");
     return NULL;
   }
-  new_block->size = size - sizeof(block_t);
+  new_block->size = size;
   new_block->free = false;
   new_block->next = NULL;
   return new_block;
@@ -91,8 +99,8 @@ block_t *generate_new_block(size_t size) {
 void merge(block_t *curr) {
   while (curr->next != NULL) {
     if (curr->free == true && curr->next->free == true) {
-      curr->next = curr->next->next;
       curr->size += sizeof(block_t) + curr->next->size;
+      curr->next = curr->next->next;
     } else {
       curr = curr->next;
     }
@@ -109,14 +117,17 @@ void merge(block_t *curr) {
   Output
   the memory
  */
-void *basic_malloc(size_t size, block_t *(find_block)(size_t, block_t *)) {
+void *basic_malloc(size_t size, block_t *(find_block)(size_t, block_t **)) {
   if (head == NULL) {
     head = generate_new_block(size);
     return head + 1;
   }
   block_t *prev = NULL;
-  block_t *curr = find_block(size, prev);
+
+  block_t *curr = find_block(size, &prev);
+
   if (curr == NULL) {
+
     curr = generate_new_block(size);
     prev->next = curr;
   } else {
@@ -134,7 +145,15 @@ void basic_free(void *ptr) {
     return;
   block_t *curr = (block_t *)ptr - 1;
   curr->free = true;
+#ifdef DEBUG
+  fprintf(stderr, "before merge\n");
+  debug();
+#endif
   merge(head);
+#ifdef DEBUG
+  fprintf(stderr, "after merge\n");
+  debug();
+#endif
 }
 /*
   ff_malloc
