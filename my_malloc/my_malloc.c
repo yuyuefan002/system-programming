@@ -1,13 +1,26 @@
 #include "my_malloc.h"
-
+//#define DEBUG
+/*
+  debug
+  This function will print the whole block list
+ */
 void debug() {
   block_t *curr = head;
+  block_t *tail = NULL;
   int i = 0;
   while (curr != NULL) {
     fprintf(stderr, "%d:%ld,%d\n", i++, curr->size, curr->free);
+    if (curr->next == NULL)
+      tail = curr;
     curr = curr->next;
   }
+  fprintf(stderr, "reverse order\n");
+  while (tail != NULL) {
+    fprintf(stderr, "%d:%ld,%d\n", i++, tail->size, tail->free);
+    tail = tail->prev;
+  }
 }
+
 /*
   name:ff_find_block
   description: Using First Fit strategy to determine the
@@ -50,6 +63,7 @@ block_t *bf_find_block(size_t size, block_t **prev) {
       bf_block = curr;
     }
     *prev = curr;
+    curr = curr->next;
   }
   return bf_block;
 }
@@ -93,13 +107,34 @@ block_t *generate_new_block(size_t size) {
   new_block->size = size;
   new_block->free = false;
   new_block->next = NULL;
+  total_block_size += size;
   return new_block;
+}
+
+void merge2(block_t *curr) {
+  while (curr->next && curr->next->free == true) {
+    curr->size += sizeof(block_t) + curr->next->size;
+    curr->next = curr->next->next;
+    if (curr->next)
+      curr->next->prev = curr;
+  }
+  while (curr->prev && curr->prev->free == true) {
+    block_t *temp = curr->prev;
+    temp->size += sizeof(block_t) + curr->size;
+
+    temp->next = curr->next;
+    if (temp->next)
+      temp->next->prev = temp;
+    curr = temp;
+  }
 }
 
 void merge(block_t *curr) {
   while (curr->next != NULL) {
     if (curr->free == true && curr->next->free == true) {
       curr->size += sizeof(block_t) + curr->next->size;
+      total_block_size += sizeof(block_t);
+      total_free_block_size += sizeof(block_t);
       curr->next = curr->next->next;
     } else {
       curr = curr->next;
@@ -120,6 +155,7 @@ void merge(block_t *curr) {
 void *basic_malloc(size_t size, block_t *(find_block)(size_t, block_t **)) {
   if (head == NULL) {
     head = generate_new_block(size);
+    head->prev = NULL;
     return head + 1;
   }
   block_t *prev = NULL;
@@ -130,8 +166,10 @@ void *basic_malloc(size_t size, block_t *(find_block)(size_t, block_t **)) {
 
     curr = generate_new_block(size);
     prev->next = curr;
+    curr->prev = prev;
   } else {
     curr->free = false;
+    total_free_block_size -= curr->size;
   }
   return curr + 1;
 }
@@ -143,13 +181,18 @@ void *basic_malloc(size_t size, block_t *(find_block)(size_t, block_t **)) {
 void basic_free(void *ptr) {
   if (ptr == NULL)
     return;
+#ifdef DEBUG
+  fprintf(stderr, "before free\n");
+  debug();
+#endif
   block_t *curr = (block_t *)ptr - 1;
   curr->free = true;
+  total_free_block_size += curr->size;
 #ifdef DEBUG
   fprintf(stderr, "before merge\n");
   debug();
 #endif
-  merge(head);
+  merge2(curr);
 #ifdef DEBUG
   fprintf(stderr, "after merge\n");
   debug();
@@ -178,3 +221,28 @@ void *bf_malloc(size_t size) { return basic_malloc(size, bf_find_block); }
   This function free the memory
  */
 void bf_free(void *ptr) { basic_free(ptr); }
+
+unsigned long get_data_segment_size() { // in bytes
+  /*
+  unsigned long total = 0;
+  block_t *curr = head;
+  while (curr) {
+    total += curr->size;
+    curr = curr->next;
+  }
+  return total;
+  */
+  return total_block_size;
+}
+
+unsigned long get_data_segment_free_space_size() { // in bytes
+  /* unsigned long total = 0;
+  block_t *curr = head;
+  while (curr) {
+    if (curr->free == true)
+      total += curr->size;
+    curr = curr->next;
+  }
+  return total;*/
+  return total_free_block_size;
+}
