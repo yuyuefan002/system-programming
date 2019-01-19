@@ -98,7 +98,7 @@ void *request_new_memory(size_t size) {
   new_block: if success, return the newly allocated block,
   else, return NULL
  */
-block_t *generate_new_block(size_t size) {
+block_t *generate_new_block(size_t size, block_t *prev) {
   block_t *new_block = request_new_memory(size);
   if (new_block == NULL) {
     fprintf(stderr, "fail to generate new block\n");
@@ -108,6 +108,12 @@ block_t *generate_new_block(size_t size) {
   new_block->free = false;
   new_block->next = NULL;
   total_block_size += size + sizeof(block_t);
+  new_block->prev = prev;
+  if (prev)
+    prev->next = new_block;
+  if (head == NULL) {
+    head = new_block;
+  }
   return new_block;
 }
 /*
@@ -135,17 +141,20 @@ void merge(block_t *curr) {
 }
 
 /*
-  split
+  fetch_block
   This function split a whole freed space into one space for use and a small
   free space
 
   Input
   curr: pointer pointing to the current block
   size: the size asked by user
+
+  Output
+  the block to use
  */
-void split(block_t *curr, size_t size) {
+block_t *fetch_block(block_t *curr, size_t size) {
   if (curr->size < size + sizeof(block_t))
-    return;
+    return curr;
   block_t *new_block = (void *)curr + size + sizeof(block_t);
   new_block->size = curr->size - size - sizeof(block_t);
   new_block->free = true;
@@ -155,7 +164,9 @@ void split(block_t *curr, size_t size) {
     new_block->next->prev = new_block;
   curr->next = new_block;
   curr->size = size;
+  return curr;
 }
+
 /*
   basic_malloc
   description: allocate memory requested by user
@@ -168,20 +179,13 @@ void split(block_t *curr, size_t size) {
   the memory
  */
 void *basic_malloc(size_t size, block_t *(find_block)(size_t, block_t **)) {
-  if (head == NULL) {
-    head = generate_new_block(size);
-    head->prev = NULL;
-    return head + 1;
-  }
   block_t *prev = NULL;
   block_t *curr = find_block(size, &prev);
 
   if (curr == NULL) {
-    curr = generate_new_block(size);
-    prev->next = curr;
-    curr->prev = prev;
+    curr = generate_new_block(size, prev);
   } else {
-    split(curr, size);
+    curr = fetch_block(curr, size);
     curr->free = false;
     total_free_block_size -= (curr->size + sizeof(block_t));
   }
