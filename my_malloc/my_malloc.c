@@ -111,13 +111,13 @@ block_t *generate_new_block(size_t size) {
   return new_block;
 }
 /*
-  merge2
+  merge
   This function merge two adjunct freed block
 
   Input
   curr: the block be freed just now
  */
-void merge2(block_t *curr) {
+void merge(block_t *curr) {
   while (curr->next && curr->next->free == true) {
     curr->size += sizeof(block_t) + curr->next->size;
     curr->next = curr->next->next;
@@ -134,19 +134,15 @@ void merge2(block_t *curr) {
   }
 }
 
-void merge(block_t *curr) {
-  while (curr->next != NULL) {
-    if (curr->free == true && curr->next->free == true) {
-      curr->size += sizeof(block_t) + curr->next->size;
-      total_block_size += sizeof(block_t);
-      total_free_block_size += sizeof(block_t);
-      curr->next = curr->next->next;
-    } else {
-      curr = curr->next;
-    }
-  }
-}
+/*
+  split
+  This function split a whole freed space into one space for use and a small
+  free space
 
+  Input
+  curr: pointer pointing to the current block
+  size: the size asked by user
+ */
 void split(block_t *curr, size_t size) {
   if (curr->size < size + sizeof(block_t))
     return;
@@ -178,20 +174,15 @@ void *basic_malloc(size_t size, block_t *(find_block)(size_t, block_t **)) {
     return head + 1;
   }
   block_t *prev = NULL;
-
   block_t *curr = find_block(size, &prev);
 
   if (curr == NULL) {
-
     curr = generate_new_block(size);
-    /*if (prev) {
-      prev->next = curr;
-      curr->prev = prev;
-      }*/
+    prev->next = curr;
+    curr->prev = prev;
   } else {
     split(curr, size);
     curr->free = false;
-
     total_free_block_size -= (curr->size + sizeof(block_t));
   }
   return curr + 1;
@@ -215,7 +206,7 @@ void basic_free(void *ptr) {
   fprintf(stderr, "before merge\n");
   debug();
 #endif
-  merge2(curr);
+  merge(curr);
 #ifdef DEBUG
   fprintf(stderr, "after merge\n");
   debug();
