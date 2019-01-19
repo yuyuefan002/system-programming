@@ -107,15 +107,19 @@ block_t *generate_new_block(size_t size) {
   new_block->size = size;
   new_block->free = false;
   new_block->next = NULL;
-  //  total_block_size += size;
+  total_block_size += size + sizeof(block_t);
   return new_block;
 }
+/*
+  merge2
+  This function merge two adjunct freed block
 
+  Input
+  curr: the block be freed just now
+ */
 void merge2(block_t *curr) {
   while (curr->next && curr->next->free == true) {
     curr->size += sizeof(block_t) + curr->next->size;
-    // total_block_size += sizeof(block_t);
-    // total_free_block_size += sizeof(block_t);
     curr->next = curr->next->next;
     if (curr->next)
       curr->next->prev = curr;
@@ -123,8 +127,6 @@ void merge2(block_t *curr) {
   while (curr->prev && curr->prev->free == true) {
     block_t *temp = curr->prev;
     temp->size += sizeof(block_t) + curr->size;
-    // total_block_size += sizeof(block_t);
-    // total_free_block_size += sizeof(block_t);
     temp->next = curr->next;
     if (temp->next)
       temp->next->prev = temp;
@@ -182,13 +184,15 @@ void *basic_malloc(size_t size, block_t *(find_block)(size_t, block_t **)) {
   if (curr == NULL) {
 
     curr = generate_new_block(size);
-    prev->next = curr;
-    curr->prev = prev;
+    /*if (prev) {
+      prev->next = curr;
+      curr->prev = prev;
+      }*/
   } else {
     split(curr, size);
     curr->free = false;
 
-    // total_free_block_size -= curr->size;
+    total_free_block_size -= (curr->size + sizeof(block_t));
   }
   return curr + 1;
 }
@@ -206,7 +210,7 @@ void basic_free(void *ptr) {
 #endif
   block_t *curr = (block_t *)ptr - 1;
   curr->free = true;
-  // total_free_block_size += curr->size;
+  total_free_block_size += curr->size + sizeof(block_t);
 #ifdef DEBUG
   fprintf(stderr, "before merge\n");
   debug();
@@ -217,6 +221,7 @@ void basic_free(void *ptr) {
   debug();
 #endif
 }
+
 /*
   ff_malloc
   This function allocate memory using first fit strategy
@@ -241,27 +246,8 @@ void *bf_malloc(size_t size) { return basic_malloc(size, bf_find_block); }
  */
 void bf_free(void *ptr) { basic_free(ptr); }
 
-unsigned long get_data_segment_size() { // in bytes
+unsigned long get_data_segment_size() { return total_block_size; }
 
-  unsigned long total = 0;
-  block_t *curr = head;
-  while (curr) {
-    total += curr->size;
-    curr = curr->next;
-  }
-  return total;
-
-  // return total_block_size;
-}
-
-unsigned long get_data_segment_free_space_size() { // in bytes
-  unsigned long total = 0;
-  block_t *curr = head;
-  while (curr) {
-    if (curr->free == true)
-      total += curr->size;
-    curr = curr->next;
-  }
-  return total;
-  // return total_free_block_size;
+unsigned long get_data_segment_free_space_size() {
+  return total_free_block_size;
 }
