@@ -35,7 +35,7 @@ void debug() {
  */
 block_t *ff_find_block(size_t size, block_t **prev) {
   block_t *curr = head, *ff_block = NULL;
-  while (curr != NULL && !(curr->free == true && curr->size > size)) {
+  while (curr != NULL && (curr->free == false || curr->size < size)) {
     *prev = curr;
     curr = curr->next;
   }
@@ -58,7 +58,7 @@ block_t *ff_find_block(size_t size, block_t **prev) {
 block_t *bf_find_block(size_t size, block_t **prev) {
   block_t *curr = head, *bf_block = NULL;
   while (curr != NULL) {
-    if (curr->free == true && curr->size > size &&
+    if (curr->free == true && curr->size >= size &&
         (bf_block == NULL || curr->size < bf_block->size)) {
       bf_block = curr;
     }
@@ -107,13 +107,15 @@ block_t *generate_new_block(size_t size) {
   new_block->size = size;
   new_block->free = false;
   new_block->next = NULL;
-  total_block_size += size;
+  //  total_block_size += size;
   return new_block;
 }
 
 void merge2(block_t *curr) {
   while (curr->next && curr->next->free == true) {
     curr->size += sizeof(block_t) + curr->next->size;
+    // total_block_size += sizeof(block_t);
+    // total_free_block_size += sizeof(block_t);
     curr->next = curr->next->next;
     if (curr->next)
       curr->next->prev = curr;
@@ -121,7 +123,8 @@ void merge2(block_t *curr) {
   while (curr->prev && curr->prev->free == true) {
     block_t *temp = curr->prev;
     temp->size += sizeof(block_t) + curr->size;
-
+    // total_block_size += sizeof(block_t);
+    // total_free_block_size += sizeof(block_t);
     temp->next = curr->next;
     if (temp->next)
       temp->next->prev = temp;
@@ -140,6 +143,20 @@ void merge(block_t *curr) {
       curr = curr->next;
     }
   }
+}
+
+void split(block_t *curr, size_t size) {
+  if (curr->size < size + sizeof(block_t))
+    return;
+  block_t *new_block = (void *)curr + size + sizeof(block_t);
+  new_block->size = curr->size - size - sizeof(block_t);
+  new_block->free = true;
+  new_block->next = curr->next;
+  new_block->prev = curr;
+  if (new_block->next)
+    new_block->next->prev = new_block;
+  curr->next = new_block;
+  curr->size = size;
 }
 /*
   basic_malloc
@@ -168,8 +185,10 @@ void *basic_malloc(size_t size, block_t *(find_block)(size_t, block_t **)) {
     prev->next = curr;
     curr->prev = prev;
   } else {
+    split(curr, size);
     curr->free = false;
-    total_free_block_size -= curr->size;
+
+    // total_free_block_size -= curr->size;
   }
   return curr + 1;
 }
@@ -187,7 +206,7 @@ void basic_free(void *ptr) {
 #endif
   block_t *curr = (block_t *)ptr - 1;
   curr->free = true;
-  total_free_block_size += curr->size;
+  // total_free_block_size += curr->size;
 #ifdef DEBUG
   fprintf(stderr, "before merge\n");
   debug();
@@ -223,7 +242,7 @@ void *bf_malloc(size_t size) { return basic_malloc(size, bf_find_block); }
 void bf_free(void *ptr) { basic_free(ptr); }
 
 unsigned long get_data_segment_size() { // in bytes
-  /*
+
   unsigned long total = 0;
   block_t *curr = head;
   while (curr) {
@@ -231,18 +250,18 @@ unsigned long get_data_segment_size() { // in bytes
     curr = curr->next;
   }
   return total;
-  */
-  return total_block_size;
+
+  // return total_block_size;
 }
 
 unsigned long get_data_segment_free_space_size() { // in bytes
-  /* unsigned long total = 0;
+  unsigned long total = 0;
   block_t *curr = head;
   while (curr) {
     if (curr->free == true)
       total += curr->size;
     curr = curr->next;
   }
-  return total;*/
-  return total_free_block_size;
+  return total;
+  // return total_free_block_size;
 }
