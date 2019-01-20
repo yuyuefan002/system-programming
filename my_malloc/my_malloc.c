@@ -61,7 +61,10 @@ block_t *bf_find_block(size_t size, block_t **prev) {
     if (curr->free == true && curr->size >= size &&
         (bf_block == NULL || curr->size < bf_block->size)) {
       bf_block = curr;
+      if (curr->size == size)
+        break;
     }
+
     *prev = curr;
     curr = curr->next;
   }
@@ -107,7 +110,7 @@ block_t *generate_new_block(size_t size, block_t *prev) {
   new_block->size = size;
   new_block->free = false;
   new_block->next = NULL;
-  total_block_size += size + sizeof(block_t);
+  // total_block_size += size + sizeof(block_t);
   new_block->prev = prev;
   if (prev)
     prev->next = new_block;
@@ -124,19 +127,18 @@ block_t *generate_new_block(size_t size, block_t *prev) {
   curr: the block be freed just now
  */
 void merge(block_t *curr) {
-  while (curr->next && curr->next->free == true) {
-    curr->size += sizeof(block_t) + curr->next->size;
-    curr->next = curr->next->next;
+  block_t *next = curr->next, *prev = curr->prev;
+  if (next && next->free == true) {
+    curr->size += sizeof(block_t) + next->size;
+    curr->next = next->next;
     if (curr->next)
       curr->next->prev = curr;
   }
-  while (curr->prev && curr->prev->free == true) {
-    block_t *temp = curr->prev;
-    temp->size += sizeof(block_t) + curr->size;
-    temp->next = curr->next;
-    if (temp->next)
-      temp->next->prev = temp;
-    curr = temp;
+  if (prev && prev->free == true) {
+    prev->size += sizeof(block_t) + curr->size;
+    prev->next = curr->next;
+    if (prev->next)
+      prev->next->prev = prev;
   }
 }
 
@@ -187,7 +189,7 @@ void *basic_malloc(size_t size, block_t *(find_block)(size_t, block_t **)) {
   } else {
     curr = fetch_block(curr, size);
     curr->free = false;
-    total_free_block_size -= (curr->size + sizeof(block_t));
+    // total_free_block_size -= (curr->size + sizeof(block_t));
   }
   return curr + 1;
 }
@@ -205,7 +207,7 @@ void basic_free(void *ptr) {
 #endif
   block_t *curr = (block_t *)ptr - 1;
   curr->free = true;
-  total_free_block_size += curr->size + sizeof(block_t);
+  // total_free_block_size += curr->size + sizeof(block_t);
 #ifdef DEBUG
   fprintf(stderr, "before merge\n");
   debug();
@@ -221,7 +223,21 @@ void basic_free(void *ptr) {
   ff_malloc
   This function allocate memory using first fit strategy
  */
-void *ff_malloc(size_t size) { return basic_malloc(size, ff_find_block); }
+void *ff_malloc(size_t size) {
+  /*  block_t *prev = NULL;
+  block_t *curr = ff_find_block(size, &prev);
+
+  if (curr == NULL) {
+    curr = generate_new_block(size, prev);
+  } else {
+    curr = fetch_block(curr, size);
+    curr->free = false;
+    total_free_block_size -= (curr->size + sizeof(block_t));
+  }
+  return curr + 1;
+}*/
+  return basic_malloc(size, ff_find_block);
+}
 
 /*
   ff_free
@@ -241,8 +257,25 @@ void *bf_malloc(size_t size) { return basic_malloc(size, bf_find_block); }
  */
 void bf_free(void *ptr) { basic_free(ptr); }
 
-unsigned long get_data_segment_size() { return total_block_size; }
+unsigned long get_data_segment_size() {
+  size_t total = 0;
+  block_t *curr = head;
+  while (curr) {
+    total += curr->size + sizeof(block_t);
+    curr = curr->next;
+  }
+  return total;
+}
+// return total_block_size; }
 
 unsigned long get_data_segment_free_space_size() {
-  return total_free_block_size;
+  size_t total = 0;
+  block_t *curr = head;
+  while (curr) {
+    if (curr->free)
+      total += curr->size + sizeof(block_t);
+    curr = curr->next;
+  }
+  return total;
+  // return total_free_block_size;
 }
