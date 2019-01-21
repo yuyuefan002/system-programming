@@ -155,7 +155,7 @@ void merge(block_t *curr) {
   the block to use
  */
 block_t *fetch_block(block_t *curr, size_t size) {
-  if (curr->size < size + sizeof(block_t))
+  if (curr->size < size + sizeof(block_t) + sizeof(int))
     return curr;
   block_t *new_block = (void *)curr + size + sizeof(block_t);
   new_block->size = curr->size - size - sizeof(block_t);
