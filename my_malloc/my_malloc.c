@@ -37,11 +37,10 @@ void debug() {
   Output
   ff_block: if there is a fit block, return it; else, return NULL
  */
-block_t *ff_find_block(size_t size, block_t **prev) {
+block_t *ff_find_block(size_t size) {
   block_t *curr = head_free, *ff_block = NULL;
   while (curr != NULL && (curr->size < size)) {
     assert(curr->free == true);
-    *prev = curr;
     curr = curr->next_free;
   }
   ff_block = curr;
@@ -60,7 +59,7 @@ block_t *ff_find_block(size_t size, block_t **prev) {
   Output
   bf_block: if there is a fit block, return it; else, return NULL
  */
-block_t *bf_find_block(size_t size, block_t **prev) {
+block_t *bf_find_block(size_t size) {
   block_t *curr = head_free, *bf_block = NULL;
   while (curr != NULL) {
     assert(curr->free == true);
@@ -70,22 +69,37 @@ block_t *bf_find_block(size_t size, block_t **prev) {
       if (curr->size == size)
         break;
     }
-
-    *prev = curr;
     curr = curr->next_free;
   }
   return bf_block;
 }
-block_t *add_free_block(block_t *curr) {
+
+/*
+  add_free_block
+  This function add a block into freelist
+
+  Input
+  curr:the block to be added into free list
+
+  Output
+
+ */
+void add_free_block(block_t *curr) {
   assert(curr->free == true);
   curr->next_free = head_free;
   if (head_free)
     head_free->prev_free = curr;
   curr->prev_free = NULL;
   head_free = curr;
-  return curr;
 }
 
+/*
+  delete_free_block
+  This function delete a block from freelist
+
+  Input
+  curr: the block to be deleted from freelist
+ */
 void delete_free_block(block_t *curr) {
   assert(curr->free == false);
   if (curr == head_free)
@@ -97,6 +111,7 @@ void delete_free_block(block_t *curr) {
   curr->next_free = NULL;
   curr->prev_free = NULL;
 }
+
 /*
   request_new_memory
   description: Using sbrk() to request new memory
@@ -151,6 +166,28 @@ block_t *generate_new_block(size_t size) {
 }
 
 /*
+  split
+  This function split a block into two blocks
+
+  Input
+  curr: the whole block
+  size: one block size(the other size is curr->size-size-sizeof(block_t)
+*/
+void split(block_t *curr, size_t size) {
+  block_t *new_block = (void *)curr + size + sizeof(block_t);
+  new_block->size = curr->size - size - sizeof(block_t);
+  new_block->free = true;
+  new_block->next = curr->next;
+  new_block->prev = curr;
+  if (curr == tail)
+    tail = new_block;
+  if (new_block->next)
+    new_block->next->prev = new_block;
+  curr->next = new_block;
+  curr->size = size;
+  add_free_block(new_block);
+}
+/*
   merge
   This function merge two adjunct freed block
 
@@ -184,8 +221,7 @@ void merge(block_t *curr) {
 
 /*
   fetch_block
-  This function split a whole freed space into one space for use and a small
-  free space
+  This function fetch a part of the block from a whole block
 
   Input
   curr: pointer pointing to the current block
@@ -195,21 +231,11 @@ void merge(block_t *curr) {
   the block to use
  */
 block_t *fetch_block(block_t *curr, size_t size) {
+  curr->free = false;
   delete_free_block(curr);
   if (curr->size < size + sizeof(block_t) + sizeof(int))
     return curr;
-  block_t *new_block = (void *)curr + size + sizeof(block_t);
-  new_block->size = curr->size - size - sizeof(block_t);
-  new_block->free = true;
-  new_block->next = curr->next;
-  new_block->prev = curr;
-  if (curr == tail)
-    tail = new_block;
-  if (new_block->next)
-    new_block->next->prev = new_block;
-  curr->next = new_block;
-  curr->size = size;
-  add_free_block(new_block);
+  split(curr, size);
   return curr;
 }
 
@@ -224,14 +250,11 @@ block_t *fetch_block(block_t *curr, size_t size) {
   Output
   the memory
  */
-void *basic_malloc(size_t size, block_t *(find_block)(size_t, block_t **)) {
-  block_t *prev = NULL;
-  block_t *curr = find_block(size, &prev);
-
+void *basic_malloc(size_t size, block_t *(find_block)(size_t)) {
+  block_t *curr = find_block(size);
   if (curr == NULL) {
     curr = generate_new_block(size);
   } else {
-    curr->free = false;
     curr = fetch_block(curr, size);
   }
   return curr + 1;
