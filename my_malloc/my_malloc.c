@@ -6,18 +6,22 @@
  */
 void debug() {
   block_t *curr = head;
-  block_t *tail = NULL;
   int i = 0;
   while (curr != NULL) {
     fprintf(stderr, "%d:%ld,%d\n", i++, curr->size, curr->free);
-    if (curr->next == NULL)
-      tail = curr;
     curr = curr->next;
   }
   fprintf(stderr, "reverse order\n");
-  while (tail != NULL) {
-    fprintf(stderr, "%d:%ld,%d\n", i++, tail->size, tail->free);
-    tail = tail->prev;
+  curr = tail;
+  while (curr != NULL) {
+    fprintf(stderr, "%d:%ld,%d\n", i++, curr->size, curr->free);
+    curr = curr->prev;
+  }
+  fprintf(stderr, "free list\n");
+  curr = head_free;
+  while (curr != NULL) {
+    fprintf(stderr, "%d:%ld,%d\n", i++, curr->size, curr->free);
+    curr = curr->next_free;
   }
 }
 
@@ -34,10 +38,11 @@ void debug() {
   ff_block: if there is a fit block, return it; else, return NULL
  */
 block_t *ff_find_block(size_t size, block_t **prev) {
-  block_t *curr = head, *ff_block = NULL;
-  while (curr != NULL && (curr->free == false || curr->size < size)) {
+  block_t *curr = head_free, *ff_block = NULL;
+  while (curr != NULL && (curr->size < size)) {
+    assert(curr->free == true);
     *prev = curr;
-    curr = curr->next;
+    curr = curr->next_free;
   }
   ff_block = curr;
   return ff_block;
@@ -56,9 +61,10 @@ block_t *ff_find_block(size_t size, block_t **prev) {
   bf_block: if there is a fit block, return it; else, return NULL
  */
 block_t *bf_find_block(size_t size, block_t **prev) {
-  block_t *curr = head, *bf_block = NULL;
+  block_t *curr = head_free, *bf_block = NULL;
   while (curr != NULL) {
-    if (curr->free == true && curr->size >= size &&
+    assert(curr->free == true);
+    if (curr->size >= size &&
         (bf_block == NULL || curr->size < bf_block->size)) {
       bf_block = curr;
       if (curr->size == size)
@@ -66,11 +72,31 @@ block_t *bf_find_block(size_t size, block_t **prev) {
     }
 
     *prev = curr;
-    curr = curr->next;
+    curr = curr->next_free;
   }
   return bf_block;
 }
+block_t *add_free_block(block_t *curr) {
+  assert(curr->free == true);
+  curr->next_free = head_free;
+  if (head_free)
+    head_free->prev_free = curr;
+  curr->prev_free = NULL;
+  head_free = curr;
+  return curr;
+}
 
+void delete_free_block(block_t *curr) {
+  assert(curr->free == false);
+  if (curr == head_free)
+    head_free = curr->next_free;
+  if (curr->next_free)
+    curr->next_free->prev_free = curr->prev_free;
+  if (curr->prev_free)
+    curr->prev_free->next_free = curr->next_free;
+  curr->next_free = NULL;
+  curr->prev_free = NULL;
+}
 /*
   request_new_memory
   description: Using sbrk() to request new memory
@@ -101,7 +127,7 @@ void *request_new_memory(size_t size) {
   new_block: if success, return the newly allocated block,
   else, return NULL
  */
-block_t *generate_new_block(size_t size, block_t *prev) {
+block_t *generate_new_block(size_t size) {
   block_t *new_block = request_new_memory(size);
   if (new_block == NULL) {
     fprintf(stderr, "fail to generate new block\n");
@@ -110,15 +136,20 @@ block_t *generate_new_block(size_t size, block_t *prev) {
   new_block->size = size;
   new_block->free = false;
   new_block->next = NULL;
-  // total_block_size += size + sizeof(block_t);
-  new_block->prev = prev;
-  if (prev)
-    prev->next = new_block;
+  new_block->prev = tail;
+  new_block->next_free = NULL;
+  new_block->prev_free = NULL;
+  if (tail) {
+    tail->next = new_block;
+  }
+  tail = new_block;
   if (head == NULL) {
     head = new_block;
   }
+
   return new_block;
 }
+
 /*
   merge
   This function merge two adjunct freed block
@@ -128,17 +159,26 @@ block_t *generate_new_block(size_t size, block_t *prev) {
  */
 void merge(block_t *curr) {
   block_t *next = curr->next, *prev = curr->prev;
+
   if (next && next->free == true) {
     curr->size += sizeof(block_t) + next->size;
     curr->next = next->next;
     if (curr->next)
       curr->next->prev = curr;
+    next->free = false;
+    delete_free_block(next);
+    if (tail == next)
+      tail = curr;
   }
   if (prev && prev->free == true) {
     prev->size += sizeof(block_t) + curr->size;
     prev->next = curr->next;
     if (prev->next)
       prev->next->prev = prev;
+    curr->free = false;
+    delete_free_block(curr);
+    if (tail == curr)
+      tail = prev;
   }
 }
 
@@ -155,6 +195,7 @@ void merge(block_t *curr) {
   the block to use
  */
 block_t *fetch_block(block_t *curr, size_t size) {
+  delete_free_block(curr);
   if (curr->size < size + sizeof(block_t) + sizeof(int))
     return curr;
   block_t *new_block = (void *)curr + size + sizeof(block_t);
@@ -162,10 +203,13 @@ block_t *fetch_block(block_t *curr, size_t size) {
   new_block->free = true;
   new_block->next = curr->next;
   new_block->prev = curr;
+  if (curr == tail)
+    tail = new_block;
   if (new_block->next)
     new_block->next->prev = new_block;
   curr->next = new_block;
   curr->size = size;
+  add_free_block(new_block);
   return curr;
 }
 
@@ -185,11 +229,10 @@ void *basic_malloc(size_t size, block_t *(find_block)(size_t, block_t **)) {
   block_t *curr = find_block(size, &prev);
 
   if (curr == NULL) {
-    curr = generate_new_block(size, prev);
+    curr = generate_new_block(size);
   } else {
-    curr = fetch_block(curr, size);
     curr->free = false;
-    // total_free_block_size -= (curr->size + sizeof(block_t));
+    curr = fetch_block(curr, size);
   }
   return curr + 1;
 }
@@ -207,7 +250,7 @@ void basic_free(void *ptr) {
 #endif
   block_t *curr = (block_t *)ptr - 1;
   curr->free = true;
-  // total_free_block_size += curr->size + sizeof(block_t);
+  add_free_block(curr);
 #ifdef DEBUG
   fprintf(stderr, "before merge\n");
   debug();
@@ -223,21 +266,7 @@ void basic_free(void *ptr) {
   ff_malloc
   This function allocate memory using first fit strategy
  */
-void *ff_malloc(size_t size) {
-  /*  block_t *prev = NULL;
-  block_t *curr = ff_find_block(size, &prev);
-
-  if (curr == NULL) {
-    curr = generate_new_block(size, prev);
-  } else {
-    curr = fetch_block(curr, size);
-    curr->free = false;
-    total_free_block_size -= (curr->size + sizeof(block_t));
-  }
-  return curr + 1;
-}*/
-  return basic_malloc(size, ff_find_block);
-}
+void *ff_malloc(size_t size) { return basic_malloc(size, ff_find_block); }
 
 /*
   ff_free
@@ -266,7 +295,6 @@ unsigned long get_data_segment_size() {
   }
   return total;
 }
-// return total_block_size; }
 
 unsigned long get_data_segment_free_space_size() {
   size_t total = 0;
@@ -277,5 +305,4 @@ unsigned long get_data_segment_free_space_size() {
     curr = curr->next;
   }
   return total;
-  // return total_free_block_size;
 }
