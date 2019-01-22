@@ -1,5 +1,6 @@
 CC=gcc
-CFLAGS=-O3 -fPIC
+#CFLAGS=-O3 -fPIC
+CFLAGS= -Werror -Wall -pedantic -std=gnu99 -ggdb3
 MALLOC_VERSION=FF
 WDIR=..
 
