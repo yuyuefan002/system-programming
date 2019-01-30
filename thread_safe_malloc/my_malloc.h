@@ -16,9 +16,12 @@ struct _block_t {
   bool free;
 };
 typedef struct _block_t block_t;
-__thread block_t *head = NULL;
-__thread block_t *tail = NULL;
-__thread block_t *head_free = NULL;
+__thread block_t *head_nolock = NULL;
+__thread block_t *tail_nolock = NULL;
+__thread block_t *head_free_nolock = NULL;
+block_t *head = NULL;
+block_t *tail = NULL;
+block_t *head_free = NULL;
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t sbrk_lock = PTHREAD_MUTEX_INITIALIZER;
 bool first_sbrk = true;
