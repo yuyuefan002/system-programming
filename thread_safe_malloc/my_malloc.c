@@ -75,11 +75,30 @@ void add_free_block_lock(block_t *curr) {
 }
 void add_free_block_nolock(block_t *curr) {
   assert(curr->free == true);
-  curr->next_free = head_free_nolock;
-  if (head_free_nolock)
-    head_free_nolock->prev_free = curr;
-  curr->prev_free = NULL;
-  head_free_nolock = curr;
+
+  block_t *p = head_free_nolock;
+  if (p == NULL) {
+    head_free_nolock = curr;
+    curr->next_free = NULL;
+    curr->prev_free = NULL;
+    return;
+  }
+  while (p->next_free) {
+    block_t *next = p->next_free;
+    if (next > curr) {
+      curr->next_free = next;
+      curr->prev_free = p;
+      next->prev_free = curr;
+      p->next_free = curr;
+      break;
+    }
+    p = p->next_free;
+  }
+  if (p->next_free == NULL) {
+    p->next_free = curr;
+    curr->prev_free = p;
+    curr->next_free = NULL;
+  }
 }
 
 /*
@@ -101,7 +120,7 @@ void delete_free_block_lock(block_t *curr) {
   curr->prev_free = NULL;
 }
 void delete_free_block_nolock(block_t *curr) {
-  assert(curr->free == false);
+  // assert(curr->free == false);
   if (curr == head_free_nolock)
     head_free_nolock = curr->next_free;
   if (curr->next_free)
@@ -269,7 +288,7 @@ void merge_lock(block_t *curr) {
   }
 }
 void merge_nolock(block_t *curr) {
-  block_t *next = curr->next, *prev = curr->prev;
+  block_t *next = curr->next_free, *prev = curr->prev_free;
 
   if (next && ((void *)curr + sizeof(block_t) + curr->size == next) &&
       next->free == true) {
@@ -398,8 +417,8 @@ void *ts_malloc_nolock(size_t size) {
 }
 
 void ts_free_nolock(void *ptr) {
-  basic_free(ptr, add_free_block_nolock, NULL, head_nolock, head_free_nolock,
-             tail_nolock);
+  basic_free(ptr, add_free_block_nolock, merge_nolock, head_nolock,
+             head_free_nolock, tail_nolock);
 }
 
 unsigned long get_data_segment_size() {
