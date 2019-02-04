@@ -46,8 +46,9 @@ block_t *bf_find_block(size_t size, block_t *head_free) {
     if (curr->size >= size &&
         (bf_block == NULL || curr->size < bf_block->size)) {
       bf_block = curr;
-      if (curr->size == size)
+      if (curr->size == size) {
         break;
+      }
     }
     curr = curr->next_free;
   }
@@ -362,7 +363,8 @@ void basic_free(void *ptr, void(add_free_block)(block_t *),
   fprintf(stderr, "before merge\n");
   debug(_head, _tail, head_free);
 #endif
-  merge(curr);
+  if (merge != NULL)
+    merge(curr);
 #ifdef DEBUG
   fprintf(stderr, "after merge\n");
   debug(_head, _tail, head_free);
@@ -396,8 +398,8 @@ void *ts_malloc_nolock(size_t size) {
 }
 
 void ts_free_nolock(void *ptr) {
-  basic_free(ptr, add_free_block_nolock, merge_nolock, head_nolock,
-             head_free_nolock, tail_nolock);
+  basic_free(ptr, add_free_block_nolock, NULL, head_nolock, head_free_nolock,
+             tail_nolock);
 }
 
 unsigned long get_data_segment_size() {
