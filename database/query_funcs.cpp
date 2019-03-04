@@ -80,7 +80,7 @@ void query3(connection *C, string team_name) {
   std::string sql =
       "SELECT \"FIRST_NAME\", \"LAST_NAME\" FROM \"PLAYER\",\"TEAM\" WHERE"
       "\"PLAYER\".\"TEAM_ID\"=\"TEAM\".\"TEAM_ID\" AND \"TEAM\".\"NAME\"='" +
-      team_name + "';";
+      team_name + "'ORDER BY \"PLAYER\".\"PPG\" DESC;";
   nontransaction N(*C);
   result R(N.exec(sql));
   std::cout << "FIRST_NAME LAST_NAME\n";
