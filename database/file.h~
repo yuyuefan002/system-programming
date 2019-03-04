@@ -1,0 +1,20 @@
+#ifndef __FILE_H__
+#define __FILE_H__
+
+class File {
+private:
+  ifstream ifs;
+
+public:
+  File(string filename) { ifs.open(filename, std::ifstream::in); }
+  ~File() { ifs.close(); }
+  std::string getNextLine() {
+    std::string str;
+    getline(ifs, str);
+    if (str.empty())
+      return {};
+    return str;
+  }
+};
+
+#endif

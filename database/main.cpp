@@ -1,4 +1,6 @@
 #include "exerciser.h"
+#include "file.h"
+#include "helper.h"
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -16,40 +18,7 @@
   "\"LAST_"                                                                    \
   "NAME\",\"MPG\",\"PPG\",\"RPG\",\"APG\",\"SPG\",\"BPG\")"
 using namespace pqxx;
-class File {
-private:
-  ifstream ifs;
 
-public:
-  File(string filename) { ifs.open(filename, std::ifstream::in); }
-  ~File() { ifs.close(); }
-  std::string getNextLine() {
-    std::string str;
-    getline(ifs, str);
-    if (str.empty())
-      return {};
-    return str;
-  }
-};
-std::string trimLeadingSpace(std::string &msg) {
-  if (msg.empty())
-    return "";
-  size_t target = msg.find_first_not_of(' ');
-  if (target == std::string::npos)
-    return msg;
-  return msg.substr(target);
-}
-std::string fetchNextSeg(std::string &msg, char c = ' ', size_t substrlen = 1) {
-  msg = trimLeadingSpace(msg);
-  size_t target = msg.find(c);
-  std::string res = msg.substr(0, target);
-  if (target != std::string::npos)
-    msg = msg.substr(target + substrlen);
-  else
-    msg = "";
-
-  return res;
-}
 int DATA_initializer(connection *C, const std::string &target,
                      const std::string filename);
 int TABLE_initializer(connection *C);
@@ -78,53 +47,31 @@ int main(int argc, char *argv[]) {
   // database
   //      load each table with rows from the provided source txt files
   if (TABLE_initializer(C.get()) == 0)
-    cout << "Created tables successfully" << endl;
-  exercise(C.get());
+    cout << "Created tables successfully\n";
 
-  DATA_initializer(C.get(), STATE, "state.txt");
-  DATA_initializer(C.get(), COLOR, "color.txt");
-  DATA_initializer(C.get(), TEAM, "team.txt");
-  DATA_initializer(C.get(), PLAYER, "player.txt");
+  int status = 0;
+  status |= DATA_initializer(C.get(), STATE, "state.txt");
+  status |= DATA_initializer(C.get(), COLOR, "color.txt");
+  status |= DATA_initializer(C.get(), TEAM, "team.txt");
+  status |= DATA_initializer(C.get(), PLAYER, "player.txt");
+  if (!status)
+    cout << "Inserted data successfully\n";
+  exercise(C.get());
   // Close database connection
   C->disconnect();
   return 0;
 }
-bool arealphas(std::string &str) {
-  for (auto it = str.begin(); it != str.end(); ++it) {
-    if (*it == '.' || *it == '-')
-      continue;
-    else if (*it == '\'') {
-      str.insert(it, '\'');
-      ++it;
-    } else if (!isalpha(*it))
-      return false;
-  }
-  return true;
-}
-std::string generateValue(std::string &line) {
-  std::string res;
-  std::string seg = fetchNextSeg(line);
-  if (arealphas(seg))
-    res += "'" + seg + "'";
-  else
-    res += seg;
-  while ((seg = fetchNextSeg(line)) != "") {
-    if (arealphas(seg))
-      res += ", '" + seg + "'";
-    else
-      res += ", " + seg;
-  }
-  return res;
-}
+
 int DATA_initializer(connection *C, const std::string &target,
                      const std::string filename) {
   work W(*C);
   try {
     File file(filename);
+    Helper helper;
     std::string line;
     std::string sql;
     while ((line = file.getNextLine()) != std::string()) {
-      line = generateValue(line);
+      line = helper.generateValue(line);
       sql = target + "VALUES(" + line + ");";
       W.exec(sql);
     }
@@ -136,6 +83,7 @@ int DATA_initializer(connection *C, const std::string &target,
   }
   return 0;
 }
+
 int TABLE_initializer(connection *C) {
   work W(*C);
   try {

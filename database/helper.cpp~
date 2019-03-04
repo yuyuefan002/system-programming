@@ -1,0 +1,21 @@
+#include "helper.h"
+
+std::string trimLeadingSpace(std::string &msg) {
+  if (msg.empty())
+    return "";
+  size_t target = msg.find_first_not_of(' ');
+  if (target == std::string::npos)
+    return msg;
+  return msg.substr(target);
+}
+std::string fetchNextSeg(std::string &msg, char c = ' ', size_t substrlen = 1) {
+  msg = trimLeadingSpace(msg);
+  size_t target = msg.find(c);
+  std::string res = msg.substr(0, target);
+  if (target != std::string::npos)
+    msg = msg.substr(target + substrlen);
+  else
+    msg = "";
+
+  return res;
+}
