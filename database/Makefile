@@ -1,11 +1,15 @@
 CC=g++
 CFLAGS=-O3 -ggdb3 -std=gnu++11 -Werror -Wall -pedantic
 EXTRAFLAGS=-lpqxx -lpq
-
+SRCS=$(wildcard *.cpp)
+OBJS=$(patsubst %.cpp,%.o,$(SRCS))
 all: test
 
-test: main.cpp exerciser.h exerciser.cpp query_funcs.h query_funcs.cpp
-	$(CC) $(CFLAGS) -o test main.cpp exerciser.cpp query_funcs.cpp $(EXTRAFLAGS)
+test: $(OBJS)
+	$(CC) $(CFLAGS) -o $@ $(OBJS) $(EXTRAFLAGS)
+
+%.o:%.cpp
+	$(CC) $(CFLAGS) -c $<
 
 clean:
 	rm -f *~ *.o test
