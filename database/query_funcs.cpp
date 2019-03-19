@@ -52,8 +52,8 @@ void query1(connection *C, int use_mpg, int min_mpg, int max_mpg, int use_ppg,
               << c[2].as<int>() << " " << c[3].as<string>() << " "
               << c[4].as<string>() << " " << c[5].as<int>() << " "
               << c[6].as<int>() << " " << c[7].as<int>() << " "
-              << c[8].as<int>() << " " << c[9].as<float>() << " "
-              << c[10].as<float>() << " " << endl;
+              << c[8].as<int>() << " " << c[9] << " " << c[10].as<float>()
+              << " " << endl;
   }
 }
 

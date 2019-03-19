@@ -33,7 +33,7 @@ int main(int argc, char *argv[]) {
     C = std::unique_ptr<connection>(
         new connection("dbname=ACC_BBALL user=postgres password=passw0rd"));
     if (C->is_open()) {
-      cout << "Opened database successfully: " << C->dbname() << endl;
+      //  cout << "Opened database successfully: " << C->dbname() << endl;
     } else {
       cout << "Can't open database" << endl;
       return 1;
@@ -46,16 +46,17 @@ int main(int argc, char *argv[]) {
   // TODO: create PLAYER, TEAM, STATE, and COLOR tables in the ACC_BBALL
   // database
   //      load each table with rows from the provided source txt files
-  if (TABLE_initializer(C.get()) == 0)
-    cout << "Created tables successfully\n";
-
+  if (TABLE_initializer(C.get()) == 0) {
+    //    cout << "Created tables successfully\n";
+  }
   int status = 0;
   status |= DATA_initializer(C.get(), STATE, "state.txt");
   status |= DATA_initializer(C.get(), COLOR, "color.txt");
   status |= DATA_initializer(C.get(), TEAM, "team.txt");
   status |= DATA_initializer(C.get(), PLAYER, "player.txt");
-  if (!status)
-    cout << "Inserted data successfully\n";
+  if (!status) {
+    //  cout << "Inserted data successfully\n";
+  }
   exercise(C.get());
   // Close database connection
   C->disconnect();
