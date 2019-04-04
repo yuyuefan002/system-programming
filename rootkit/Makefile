@@ -14,7 +14,9 @@ attack:
 
 
 clean:
-	rm -rf *.o *~ core .depend .*.cmd *.order *.symvers *.ko *.mod.c attack
+	rm -rf *.o *~ core .depend .*.cmd *.order *.symvers *.ko *.mod.c
+aclean:
+	rm attack
 else  
 
 $(info Building with KERNELRELEASE = ${KERNELRELEASE}) 
