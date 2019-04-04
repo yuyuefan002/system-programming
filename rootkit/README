@@ -1,0 +1,5 @@
+before you load the module,
+please the following command
+sudo cat /boot/System.map-*-*-generic | grep -e set_pages_rw -e set_pages_ro -e sys_call_table
+Use the first three to set your pointers respoectively.
+Or, your vm will crash.
